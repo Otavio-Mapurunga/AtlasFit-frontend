@@ -7,8 +7,13 @@ export interface User {
   age: number;
   goal: 'hipertrofia' | 'emagrecimento' | 'forca' | 'resistencia';
   experienceLevel: 'iniciante' | 'intermediario' | 'avancado';
-  limitations?: string;
+  trainingFrequency?: number;
+  limitations?: string[];
+  equipment?: string[];
+  preferences?: string;
 }
+
+export type OnboardingStep = 'account' | 'anamnese' | 'limitacoes' | 'complete';
 
 export interface Exercise {
   id: string;

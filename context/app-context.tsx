@@ -7,12 +7,15 @@ import type {
   ExerciseProgress,
   WeightEntry,
   CompletedWorkout,
+  OnboardingStep,
 } from "@/types";
 
 interface AppContextType {
   user: User | null;
   setUser: (user: User | null) => void;
   isAuthenticated: boolean;
+  onboardingStep: OnboardingStep;
+  setOnboardingStep: (step: OnboardingStep) => void;
   login: (email: string, password: string) => boolean;
   logout: () => void;
   workouts: Workout[];
@@ -164,6 +167,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("account");
   const [workouts, setWorkouts] = useState<Workout[]>(mockWorkouts);
   const [exerciseProgress] = useState<ExerciseProgress[]>(mockExerciseProgress);
   const [weightHistory] = useState<WeightEntry[]>(mockWeightHistory);
@@ -266,6 +270,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         user,
         setUser,
         isAuthenticated,
+        onboardingStep,
+        setOnboardingStep,
         login,
         logout,
         workouts,
