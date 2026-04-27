@@ -21,6 +21,32 @@ const navItems = [
     label: "Evolução",
     icon: BarChart3,
   },
+
+
+
+
+
+
+
+
+
+
+  
+{
+  href: "/dashboard/registrar-treino",
+  label: "Registrar Treino",
+  icon: ClipboardList,   // importa: import { ..., ClipboardList } from "lucide-react"
+},
+
+
+
+
+
+
+
+
+  
+  
   {
     href: "/dashboard/perfil",
     label: "Perfil",
