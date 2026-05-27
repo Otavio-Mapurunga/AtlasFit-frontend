@@ -1,6 +1,6 @@
 "use client";
-
-import { createContext, useContext, useState, ReactNode } from "react";
+import { getTreinos, registrarExecucao } from "@/lib/api";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import type {
   User,
   Workout,
@@ -165,15 +165,38 @@ const mockCompletedWorkouts: CompletedWorkout[] = [
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+function mapTreinos(data: any[]): Workout[] {
+  return data.map((treino) => ({
+    id: treino.id_treino,
+    name: treino.nome_treino,
+    dayOfWeek: treino.treino_dias?.[0]?.nome_dia ?? "Segunda",
+    exercises: treino.treino_dias?.flatMap((dia: any) =>
+      dia.treino_exercicios?.map((ex: any) => ({
+        id: ex.id_treino_exercicio,
+        name: ex.exercicios?.name ?? ex.id,
+        sets: ex.series,
+        reps: ex.repeticoes,
+        weight: 0,
+      })) ?? []
+    ) ?? [],
+  }));
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("account");
-  const [workouts, setWorkouts] = useState<Workout[]>(mockWorkouts);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [exerciseProgress] = useState<ExerciseProgress[]>(mockExerciseProgress);
   const [weightHistory] = useState<WeightEntry[]>(mockWeightHistory);
   const [completedWorkouts, setCompletedWorkouts] = useState<CompletedWorkout[]>(
     mockCompletedWorkouts
   );
+  useEffect(() => {
+  const idAluno = "522a1f07-9408-4f3f-b90c-783862846f3e"; // temporário até Sam entregar auth
+  getTreinos(idAluno)
+    .then((data) => setWorkouts(mapTreinos(data)))
+    .catch(() => setWorkouts(mockWorkouts)); // fallback pros mocks se API falhar
+}, []);
 
   const isAuthenticated = user !== null;
 
