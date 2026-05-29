@@ -19,8 +19,9 @@ export default function CreateAccountPage() {
     confirmPassword: "",
   });
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -39,19 +40,40 @@ export default function CreateAccountPage() {
       return;
     }
 
-    setUser({
-      id: "1",
-      name: formData.name,
-      email: formData.email,
-      height: 0,
-      weight: 0,
-      age: 0,
-      goal: "hipertrofia",
-      experienceLevel: "iniciante",
-    });
+    setIsLoading(true);
 
-    setOnboardingStep("anamnese");
-    router.push("/onboarding/anamnese");
+    try {
+      // 💡 QUANDO A API DE AUTH ESTIVER PRONTA:
+      // const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/cadastro`, {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({ name: formData.name, email: formData.email, password: formData.password })
+      // });
+      // if (!res.ok) throw new Error("Erro ao criar conta. Email já cadastrado?");
+      // const data = await res.json();
+
+      // Simulação de delay de rede da API
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      // Alimentando o estado global do contexto com o novo usuário
+      setUser({
+        id: "522a1f07-9408-4f3f-b90c-783862846f3e", // Alinha com o ID temporário do contexto
+        name: formData.name,
+        email: formData.email,
+        height: 0,
+        weight: 0,
+        age: 0,
+        goal: "hipertrofia",
+        experienceLevel: "iniciante",
+      });
+
+      setOnboardingStep("anamnese");
+      router.push("/onboarding/anamnese");
+    } catch (err: any) {
+      setError(err.message || "Erro ao conectar com o servidor.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -70,7 +92,7 @@ export default function CreateAccountPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm text-center">
                 {error}
               </div>
             )}
@@ -81,6 +103,7 @@ export default function CreateAccountPage() {
                 <Input
                   id="name"
                   placeholder="Seu nome"
+                  disabled={isLoading}
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
@@ -95,6 +118,7 @@ export default function CreateAccountPage() {
                   id="email"
                   type="email"
                   placeholder="seu@email.com"
+                  disabled={isLoading}
                   value={formData.email}
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
@@ -109,6 +133,7 @@ export default function CreateAccountPage() {
                   id="password"
                   type="password"
                   placeholder="Mínimo 6 caracteres"
+                  disabled={isLoading}
                   value={formData.password}
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
@@ -123,6 +148,7 @@ export default function CreateAccountPage() {
                   id="confirmPassword"
                   type="password"
                   placeholder="Confirme sua senha"
+                  disabled={isLoading}
                   value={formData.confirmPassword}
                   onChange={(e) =>
                     setFormData({ ...formData, confirmPassword: e.target.value })
@@ -134,9 +160,10 @@ export default function CreateAccountPage() {
 
             <Button
               type="submit"
+              disabled={isLoading}
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
             >
-              Criar Conta
+              {isLoading ? "Criando conta..." : "Criar Conta"}
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
