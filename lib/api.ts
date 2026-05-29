@@ -1,5 +1,9 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+if (!API_URL) {
+  console.warn("Aviso: NEXT_PUBLIC_API_URL não está definida no ambiente.");
+}
+
 // ─── TREINOS ───────────────────────────────────────────
 
 export async function getTreinos(idAluno: string) {
