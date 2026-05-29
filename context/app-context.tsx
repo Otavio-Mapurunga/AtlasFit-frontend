@@ -1,5 +1,5 @@
 "use client";
-import { getTreinos, registrarExecucao } from "@/lib/api";
+import { getTreinos, registrarExecucao, getHistoricoExecucao } from "@/lib/api";
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import type {
   User,
@@ -22,7 +22,7 @@ interface AppContextType {
   setWorkouts: (workouts: Workout[]) => void;
   todayWorkout: Workout | null;
   markExerciseComplete: (workoutId: string, exerciseId: string) => void;
-  markWorkoutComplete: (workoutId: string) => void;
+  markWorkoutComplete: (workoutId: string) => Promise<void>; // Mudou para Promise
   exerciseProgress: ExerciseProgress[];
   weightHistory: WeightEntry[];
   completedWorkouts: CompletedWorkout[];
@@ -31,6 +31,7 @@ interface AppContextType {
     exerciseId: string,
     weight: number
   ) => void;
+  isLoadingData: boolean;
 }
 
 const mockUser: User = {
@@ -78,34 +79,6 @@ const mockWorkouts: Workout[] = [
       { id: "12", name: "Cadeira Flexora", sets: 3, reps: 12, weight: 35 },
     ],
   },
-  {
-    id: "4",
-    name: "Ombros + Trapézio",
-    dayOfWeek: "Quinta",
-    exercises: [
-      {
-        id: "13",
-        name: "Desenvolvimento",
-        sets: 4,
-        reps: 10,
-        weight: 30,
-      },
-      { id: "14", name: "Elevação Lateral", sets: 3, reps: 12, weight: 10 },
-      { id: "15", name: "Elevação Frontal", sets: 3, reps: 12, weight: 10 },
-      { id: "16", name: "Encolhimento", sets: 3, reps: 15, weight: 25 },
-    ],
-  },
-  {
-    id: "5",
-    name: "Peito + Tríceps",
-    dayOfWeek: "Sexta",
-    exercises: [
-      { id: "17", name: "Supino Reto", sets: 4, reps: 8, weight: 65 },
-      { id: "18", name: "Supino Inclinado", sets: 3, reps: 10, weight: 55 },
-      { id: "19", name: "Crossover", sets: 3, reps: 12, weight: 25 },
-      { id: "20", name: "Tríceps Corda", sets: 3, reps: 12, weight: 20 },
-    ],
-  },
 ];
 
 const mockExerciseProgress: ExerciseProgress[] = [
@@ -119,26 +92,6 @@ const mockExerciseProgress: ExerciseProgress[] = [
       { date: "Seg", value: 57 },
       { date: "Ter", value: 58 },
       { date: "Qua", value: 60 },
-      { date: "Qui", value: 61 },
-      { date: "Sex", value: 63 },
-      { date: "Sáb", value: 64 },
-      { date: "Dom", value: 65 },
-    ],
-  },
-  {
-    exerciseId: "9",
-    exerciseName: "Agachamento",
-    initialWeight: 60,
-    currentWeight: 80,
-    progress: 33,
-    history: [
-      { date: "Seg", value: 60 },
-      { date: "Ter", value: 65 },
-      { date: "Qua", value: 70 },
-      { date: "Qui", value: 72 },
-      { date: "Sex", value: 75 },
-      { date: "Sáb", value: 78 },
-      { date: "Dom", value: 80 },
     ],
   },
 ];
@@ -146,21 +99,10 @@ const mockExerciseProgress: ExerciseProgress[] = [
 const mockWeightHistory: WeightEntry[] = [
   { date: "Seg", weight: 58.5 },
   { date: "Ter", weight: 59 },
-  { date: "Qua", weight: 59.5 },
-  { date: "Qui", weight: 60 },
-  { date: "Sex", weight: 60.5 },
-  { date: "Sáb", weight: 61 },
-  { date: "Dom", weight: 61 },
 ];
 
 const mockCompletedWorkouts: CompletedWorkout[] = [
   { date: "2026-03-10", workoutId: "1", workoutName: "Peito + Tríceps" },
-  { date: "2026-03-11", workoutId: "2", workoutName: "Costas + Bíceps" },
-  { date: "2026-03-12", workoutId: "3", workoutName: "Pernas" },
-  { date: "2026-03-13", workoutId: "4", workoutName: "Ombros + Trapézio" },
-  { date: "2026-03-14", workoutId: "5", workoutName: "Peito + Tríceps" },
-  { date: "2026-03-15", workoutId: "1", workoutName: "Peito + Tríceps" },
-  { date: "2026-03-16", workoutId: "2", workoutName: "Costas + Bíceps" },
 ];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -177,6 +119,7 @@ function mapTreinos(data: any[]): Workout[] {
         sets: ex.series,
         reps: ex.repeticoes,
         weight: 0,
+        completed: false,
       })) ?? []
     ) ?? [],
   }));
@@ -188,15 +131,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [exerciseProgress] = useState<ExerciseProgress[]>(mockExerciseProgress);
   const [weightHistory] = useState<WeightEntry[]>(mockWeightHistory);
-  const [completedWorkouts, setCompletedWorkouts] = useState<CompletedWorkout[]>(
-    mockCompletedWorkouts
-  );
+  const [completedWorkouts, setCompletedWorkouts] = useState<CompletedWorkout[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+
+  // Constante do ID temporário até a autenticação final rodar
+  const ID_ALUNO_TEMPORARIO = "522a1f07-9408-4f3f-b90c-783862846f3e";
+
   useEffect(() => {
-  const idAluno = "522a1f07-9408-4f3f-b90c-783862846f3e"; // temporário até Sam entregar auth
-  getTreinos(idAluno)
-    .then((data) => setWorkouts(mapTreinos(data)))
-    .catch(() => setWorkouts(mockWorkouts)); // fallback pros mocks se API falhar
-}, []);
+    async function carregarDadosIniciais() {
+      setIsLoadingData(true);
+      try {
+        // Busca Treinos e Histórico de Execuções em paralelo
+        const [treinosData, historicoData] = await Promise.all([
+          getTreinos(ID_ALUNO_TEMPORARIO),
+          getHistoricoExecucao(ID_ALUNO_TEMPORARIO).catch(() => null) 
+        ]);
+
+        setWorkouts(mapTreinos(treinosData));
+
+        if (historicoData && Array.isArray(historicoData)) {
+          const historicoMapeado: CompletedWorkout[] = historicoData.map((exec: any) => ({
+            date: exec.data_execucao?.split("T")[0] ?? new Date().toISOString().split("T")[0],
+            workoutId: exec.id_treino,
+            workoutName: exec.treinos?.nome_treino ?? "Treino Concluído",
+          }));
+          setCompletedWorkouts(historicoMapeado);
+        } else {
+          setCompletedWorkouts(mockCompletedWorkouts);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar dados da API, usando mocks:", error);
+        setWorkouts(mockWorkouts);
+        setCompletedWorkouts(mockCompletedWorkouts);
+      } finally {
+        setIsLoadingData(false);
+      }
+    }
+
+    carregarDadosIniciais();
+  }, []);
 
   const isAuthenticated = user !== null;
 
@@ -213,20 +186,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const getDayOfWeek = (): string => {
-    const days = [
-      "Domingo",
-      "Segunda",
-      "Terça",
-      "Quarta",
-      "Quinta",
-      "Sexta",
-      "Sábado",
-    ];
+    const days = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
     return days[new Date().getDay()];
   };
 
   const todayWorkout =
-    workouts.find((w) => w.dayOfWeek === getDayOfWeek()) || workouts[0];
+    workouts.find((w) => w.dayOfWeek === getDayOfWeek()) || workouts[0] || null;
 
   const markExerciseComplete = (workoutId: string, exerciseId: string) => {
     setWorkouts((prev) =>
@@ -243,36 +208,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const markWorkoutComplete = (workoutId: string) => {
+  const markWorkoutComplete = async (workoutId: string) => {
     const workout = workouts.find((w) => w.id === workoutId);
-    if (workout) {
-      setCompletedWorkouts((prev) => [
-        ...prev,
-        {
-          date: new Date().toISOString().split("T")[0],
-          workoutId,
-          workoutName: workout.name,
-        },
-      ]);
-      setWorkouts((prev) =>
-        prev.map((w) =>
-          w.id === workoutId
-            ? {
-                ...w,
-                completed: true,
-                exercises: w.exercises.map((ex) => ({ ...ex, completed: true })),
-              }
-            : w
-        )
-      );
+    if (!workout) return;
+
+    // 1. Atualização Otimista no Estado Local da UI
+    setCompletedWorkouts((prev) => [
+      ...prev,
+      {
+        date: new Date().toISOString().split("T")[0],
+        workoutId,
+        workoutName: workout.name,
+      },
+    ]);
+
+    setWorkouts((prev) =>
+      prev.map((w) =>
+        w.id === workoutId
+          ? {
+              ...w,
+              completed: true,
+              exercises: w.exercises.map((ex) => ({ ...ex, completed: true })),
+            }
+          : w
+      )
+    );
+
+    // 2. Envio do Payload Real para o Backend
+    try {
+      const payload = {
+        id_treino: workoutId,
+        id_aluno: ID_ALUNO_TEMPORARIO,
+        duracao: null, // Pode ser expandido futuramente se a UI cronometrar o treino
+        exercicios: workout.exercises.map((ex) => ({
+          id: ex.id,
+          series_realizadas: ex.sets,
+          reps_realizadas: ex.reps,
+          peso_utilizado: ex.weight || 0,
+        })),
+      };
+
+      await registrarExecucao(payload);
+      console.log("Execução salva com sucesso no backend!");
+    } catch (error) {
+      console.error("Falha ao persistir a execução no banco de dados:", error);
+      // Aqui você poderia reverter o estado local se fizesse questão de consistência estrita
     }
   };
 
-  const updateExerciseWeight = (
-    workoutId: string,
-    exerciseId: string,
-    weight: number
-  ) => {
+  const updateExerciseWeight = (workoutId: string, exerciseId: string, weight: number) => {
     setWorkouts((prev) =>
       prev.map((workout) =>
         workout.id === workoutId
@@ -306,6 +290,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         weightHistory,
         completedWorkouts,
         updateExerciseWeight,
+        isLoadingData,
       }}
     >
       {children}
