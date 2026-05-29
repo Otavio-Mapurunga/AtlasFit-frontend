@@ -15,8 +15,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -25,11 +26,22 @@ export default function LoginPage() {
       return;
     }
 
-    const success = login(email, password);
-    if (success) {
-      router.push("/dashboard");
-    } else {
-      setError("Email ou senha inválidos");
+    setIsLoading(true);
+
+    try {
+      // O método login no context pode virar async futuramente para fazer o fetch real.
+      // Como o fluxo atual é rápido, o await garante compatibilidade imediata.
+      const success = await login(email, password);
+      
+      if (success) {
+        router.push("/dashboard");
+      } else {
+        setError("Email ou senha inválidos");
+      }
+    } catch (err) {
+      setError("Erro ao autenticar. Tente novamente.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -52,6 +64,7 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   placeholder="seu@email.com"
+                  disabled={isLoading}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="bg-input border-border text-foreground"
@@ -63,6 +76,7 @@ export default function LoginPage() {
                   id="password"
                   type="password"
                   placeholder="••••••••"
+                  disabled={isLoading}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="bg-input border-border text-foreground"
@@ -71,14 +85,15 @@ export default function LoginPage() {
             </FieldGroup>
 
             {error && (
-              <p className="text-sm text-destructive text-center">{error}</p>
+              <p className="text-sm text-destructive text-center font-medium">{error}</p>
             )}
 
             <Button
               type="submit"
+              disabled={isLoading}
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
             >
-              Entrar
+              {isLoading ? "Autenticando..." : "Entrar"}
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
