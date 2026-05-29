@@ -1,5 +1,5 @@
 "use client";
-import { getTreinos, registrarExecucao, getHistoricoExecucao } from "@/lib/api";
+import { getTreinos, registrarExecucao, getHistoricoExecucao, loginApi } from "@/lib/api";
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import type {
   User,
@@ -16,71 +16,21 @@ interface AppContextType {
   isAuthenticated: boolean;
   onboardingStep: OnboardingStep;
   setOnboardingStep: (step: OnboardingStep) => void;
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   workouts: Workout[];
   setWorkouts: (workouts: Workout[]) => void;
   todayWorkout: Workout | null;
   markExerciseComplete: (workoutId: string, exerciseId: string) => void;
-  markWorkoutComplete: (workoutId: string) => Promise<void>; // Mudou para Promise
+  markWorkoutComplete: (workoutId: string) => Promise<void>;
   exerciseProgress: ExerciseProgress[];
   weightHistory: WeightEntry[];
   completedWorkouts: CompletedWorkout[];
-  updateExerciseWeight: (
-    workoutId: string,
-    exerciseId: string,
-    weight: number
-  ) => void;
+  updateExerciseWeight: (workoutId: string, exerciseId: string, weight: number) => void;
   isLoadingData: boolean;
 }
 
-const mockUser: User = {
-  id: "1",
-  name: "Luis",
-  email: "luis@email.com",
-  height: 175,
-  weight: 70,
-  age: 22,
-  goal: "hipertrofia",
-  experienceLevel: "intermediario",
-};
-
-const mockWorkouts: Workout[] = [
-  {
-    id: "1",
-    name: "Peito + Tríceps",
-    dayOfWeek: "Segunda",
-    exercises: [
-      { id: "1", name: "Supino Reto", sets: 4, reps: 8, weight: 65 },
-      { id: "2", name: "Supino Inclinado", sets: 3, reps: 10, weight: 55 },
-      { id: "3", name: "Crossover", sets: 3, reps: 12, weight: 25 },
-      { id: "4", name: "Tríceps Corda", sets: 3, reps: 12, weight: 20 },
-    ],
-  },
-  {
-    id: "2",
-    name: "Costas + Bíceps",
-    dayOfWeek: "Terça",
-    exercises: [
-      { id: "5", name: "Puxada Frontal", sets: 4, reps: 10, weight: 50 },
-      { id: "6", name: "Remada Curvada", sets: 3, reps: 10, weight: 40 },
-      { id: "7", name: "Remada Baixa", sets: 3, reps: 12, weight: 45 },
-      { id: "8", name: "Rosca Direta", sets: 3, reps: 12, weight: 15 },
-    ],
-  },
-  {
-    id: "3",
-    name: "Pernas",
-    dayOfWeek: "Quarta",
-    exercises: [
-      { id: "9", name: "Agachamento", sets: 4, reps: 8, weight: 80 },
-      { id: "10", name: "Leg Press", sets: 3, reps: 12, weight: 150 },
-      { id: "11", name: "Cadeira Extensora", sets: 3, reps: 12, weight: 40 },
-      { id: "12", name: "Cadeira Flexora", sets: 3, reps: 12, weight: 35 },
-    ],
-  },
-];
-
+// Mantidos como fallback caso a API falhe (apresentação segura)
 const mockExerciseProgress: ExerciseProgress[] = [
   {
     exerciseId: "1",
@@ -105,6 +55,18 @@ const mockCompletedWorkouts: CompletedWorkout[] = [
   { date: "2026-03-10", workoutId: "1", workoutName: "Peito + Tríceps" },
 ];
 
+// Usuário demo usado apenas como fallback visual (não autentica no back)
+const mockUser: User = {
+  id: "522a1f07-9408-4f3f-b90c-783862846f3e",
+  name: "Luis",
+  email: "luis@email.com",
+  height: 175,
+  weight: 70,
+  age: 22,
+  goal: "hipertrofia",
+  experienceLevel: "intermediario",
+};
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 function mapTreinos(data: any[]): Workout[] {
@@ -112,16 +74,17 @@ function mapTreinos(data: any[]): Workout[] {
     id: treino.id_treino,
     name: treino.nome_treino,
     dayOfWeek: treino.treino_dias?.[0]?.nome_dia ?? "Segunda",
-    exercises: treino.treino_dias?.flatMap((dia: any) =>
-      dia.treino_exercicios?.map((ex: any) => ({
-        id: ex.id_treino_exercicio,
-        name: ex.exercicios?.name ?? ex.id,
-        sets: ex.series,
-        reps: ex.repeticoes,
-        weight: 0,
-        completed: false,
-      })) ?? []
-    ) ?? [],
+    exercises:
+      treino.treino_dias?.flatMap((dia: any) =>
+        dia.treino_exercicios?.map((ex: any) => ({
+          id: ex.id_treino_exercicio,
+          name: ex.exercicios?.name ?? ex.id,
+          sets: ex.series,
+          reps: ex.repeticoes,
+          weight: 0,
+          completed: false,
+        })) ?? []
+      ) ?? [],
   }));
 }
 
@@ -134,55 +97,93 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [completedWorkouts, setCompletedWorkouts] = useState<CompletedWorkout[]>([]);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
-  // Constante do ID temporário até a autenticação final rodar
-  const ID_ALUNO_TEMPORARIO = "522a1f07-9408-4f3f-b90c-783862846f3e";
-
+  // Hidrata usuário e token do localStorage ao recarregar a página
   useEffect(() => {
-    async function carregarDadosIniciais() {
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        localStorage.removeItem("user");
+      }
+    }
+  }, []);
+
+  // Carrega treinos e histórico assim que o usuário estiver disponível
+  useEffect(() => {
+    if (!user) {
+      setIsLoadingData(false);
+      return;
+    }
+
+    async function carregarDados() {
       setIsLoadingData(true);
       try {
-        // Busca Treinos e Histórico de Execuções em paralelo
-        const [treinosData, historicoData] = await Promise.all([
-          getTreinos(ID_ALUNO_TEMPORARIO),
-          getHistoricoExecucao(ID_ALUNO_TEMPORARIO).catch(() => null) 
+        const [treinosRaw, historicoData] = await Promise.all([
+          getTreinos(),
+          getHistoricoExecucao().catch(() => null),
         ]);
 
-        setWorkouts(mapTreinos(treinosData));
+        // getTreinos() retorna { treinos: [...] }
+        const lista = Array.isArray(treinosRaw)
+          ? treinosRaw
+          : treinosRaw?.treinos ?? [];
+        setWorkouts(mapTreinos(lista));
 
         if (historicoData && Array.isArray(historicoData)) {
-          const historicoMapeado: CompletedWorkout[] = historicoData.map((exec: any) => ({
-            date: exec.data_execucao?.split("T")[0] ?? new Date().toISOString().split("T")[0],
-            workoutId: exec.id_treino,
-            workoutName: exec.treinos?.nome_treino ?? "Treino Concluído",
-          }));
-          setCompletedWorkouts(historicoMapeado);
+          setCompletedWorkouts(
+            historicoData.map((exec: any) => ({
+              date:
+                exec.data_execucao?.split("T")[0] ??
+                new Date().toISOString().split("T")[0],
+              workoutId: exec.id_treino,
+              workoutName: exec.treinos?.nome_treino ?? "Treino Concluído",
+            }))
+          );
         } else {
           setCompletedWorkouts(mockCompletedWorkouts);
         }
       } catch (error) {
-        console.error("Erro ao carregar dados da API, usando mocks:", error);
-        setWorkouts(mockWorkouts);
+        console.error("Erro ao carregar dados da API:", error);
         setCompletedWorkouts(mockCompletedWorkouts);
       } finally {
         setIsLoadingData(false);
       }
     }
 
-    carregarDadosIniciais();
-  }, []);
+    carregarDados();
+  }, [user]);
 
   const isAuthenticated = user !== null;
 
-  const login = (email: string, password: string): boolean => {
-    if (email && password) {
-      setUser(mockUser);
+  const login = async (email: string, password: string): Promise<boolean> => {
+    if (!email || !password) return false;
+
+    try {
+      // Para a apresentação: usa o ID do usuário demo conhecido no banco.
+      // Quando o back tiver cadastro real, trocar pelo ID retornado pelo endpoint de registro.
+      const userId = mockUser.id;
+      const { access_token } = await loginApi(userId);
+
+      localStorage.setItem("token", access_token);
+
+      const loggedUser: User = { ...mockUser, id: userId };
+      localStorage.setItem("user", JSON.stringify(loggedUser));
+      setUser(loggedUser);
+
       return true;
+    } catch (err) {
+      console.error("Falha no login:", err);
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
+    setWorkouts([]);
+    setCompletedWorkouts([]);
   };
 
   const getDayOfWeek = (): string => {
@@ -212,7 +213,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const workout = workouts.find((w) => w.id === workoutId);
     if (!workout) return;
 
-    // 1. Atualização Otimista no Estado Local da UI
+    // Atualização otimista
     setCompletedWorkouts((prev) => [
       ...prev,
       {
@@ -221,38 +222,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         workoutName: workout.name,
       },
     ]);
-
     setWorkouts((prev) =>
       prev.map((w) =>
         w.id === workoutId
-          ? {
-              ...w,
-              completed: true,
-              exercises: w.exercises.map((ex) => ({ ...ex, completed: true })),
-            }
+          ? { ...w, completed: true, exercises: w.exercises.map((ex) => ({ ...ex, completed: true })) }
           : w
       )
     );
 
-    // 2. Envio do Payload Real para o Backend
     try {
-      const payload = {
+      await registrarExecucao({
         id_treino: workoutId,
-        id_aluno: ID_ALUNO_TEMPORARIO,
-        duracao: null, // Pode ser expandido futuramente se a UI cronometrar o treino
+        duracao: null,
         exercicios: workout.exercises.map((ex) => ({
           id: ex.id,
           series_realizadas: ex.sets,
-          reps_realizadas: ex.reps,
+          // reps pode ser "8-10" — manda null se não for número puro
+          reps_realizadas: typeof ex.reps === "number" ? ex.reps : null,
           peso_utilizado: ex.weight || 0,
         })),
-      };
-
-      await registrarExecucao(payload);
-      console.log("Execução salva com sucesso no backend!");
+      });
     } catch (error) {
-      console.error("Falha ao persistir a execução no banco de dados:", error);
-      // Aqui você poderia reverter o estado local se fizesse questão de consistência estrita
+      console.error("Falha ao registrar execução no backend:", error);
     }
   };
 
