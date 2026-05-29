@@ -11,24 +11,16 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, setUser } = useApp();
+  const { isAuthenticated } = useApp();
   const router = useRouter();
 
   useEffect(() => {
-    // Auto-login for demo purposes
     if (!isAuthenticated) {
-      setUser({
-        id: "1",
-        name: "Luis",
-        email: "luis@email.com",
-        height: 175,
-        weight: 70,
-        age: 22,
-        goal: "hipertrofia",
-        experienceLevel: "intermediario",
-      });
+      router.push("/entrar");
     }
-  }, [isAuthenticated, setUser]);
+  }, [isAuthenticated, router]);
+
+  if (!isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-background">
