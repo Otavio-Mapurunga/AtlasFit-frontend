@@ -11,7 +11,7 @@ import { useApp } from "@/context/app-context";
 
 export default function CreateAccountPage() {
   const router = useRouter();
-  const { setUser, setOnboardingStep } = useApp();
+  const { register, setOnboardingStep } = useApp();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -43,32 +43,14 @@ export default function CreateAccountPage() {
     setIsLoading(true);
 
     try {
-      // 💡 QUANDO A API DE AUTH ESTIVER PRONTA:
-      // const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/cadastro`, {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ name: formData.name, email: formData.email, password: formData.password })
-      // });
-      // if (!res.ok) throw new Error("Erro ao criar conta. Email já cadastrado?");
-      // const data = await res.json();
+      const success = await register(formData.name, formData.email, formData.password);
 
-      // Simulação de delay de rede da API
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      // Alimentando o estado global do contexto com o novo usuário
-      setUser({
-        id: "522a1f07-9408-4f3f-b90c-783862846f3e", // Alinha com o ID temporário do contexto
-        name: formData.name,
-        email: formData.email,
-        height: 0,
-        weight: 0,
-        age: 0,
-        goal: "hipertrofia",
-        experienceLevel: "iniciante",
-      });
-
-      setOnboardingStep("anamnese");
-      router.push("/onboarding/anamnese");
+      if (success) {
+        setOnboardingStep("anamnese");
+        router.push("/onboarding/anamnese");
+      } else {
+        setError("Erro ao criar conta. Tente novamente.");
+      }
     } catch (err: any) {
       setError(err.message || "Erro ao conectar com o servidor.");
     } finally {
@@ -105,9 +87,7 @@ export default function CreateAccountPage() {
                   placeholder="Seu nome"
                   disabled={isLoading}
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="bg-input border-border text-foreground"
                 />
               </Field>
@@ -120,9 +100,7 @@ export default function CreateAccountPage() {
                   placeholder="seu@email.com"
                   disabled={isLoading}
                   value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="bg-input border-border text-foreground"
                 />
               </Field>
@@ -135,9 +113,7 @@ export default function CreateAccountPage() {
                   placeholder="Mínimo 6 caracteres"
                   disabled={isLoading}
                   value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="bg-input border-border text-foreground"
                 />
               </Field>
@@ -150,19 +126,13 @@ export default function CreateAccountPage() {
                   placeholder="Confirme sua senha"
                   disabled={isLoading}
                   value={formData.confirmPassword}
-                  onChange={(e) =>
-                    setFormData({ ...formData, confirmPassword: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   className="bg-input border-border text-foreground"
                 />
               </Field>
             </FieldGroup>
 
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
+            <Button type="submit" disabled={isLoading} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
               {isLoading ? "Criando conta..." : "Criar Conta"}
             </Button>
 

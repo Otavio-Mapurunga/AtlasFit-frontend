@@ -5,7 +5,9 @@ export interface User {
   height: number;
   weight: number;
   age: number;
+  sexo?: string;
   goal: 'hipertrofia' | 'emagrecimento' | 'forca' | 'resistencia';
+  goals?: string[]
   experienceLevel: 'iniciante' | 'intermediario' | 'avancado';
   trainingFrequency?: number;
   limitations?: string[];

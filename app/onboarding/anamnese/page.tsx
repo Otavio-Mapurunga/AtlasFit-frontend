@@ -32,6 +32,7 @@ export default function AnamnasePage() {
     height: "",
     weight: "",
     age: "",
+    sexo: "",
     goal: "hipertrofia",
     experienceLevel: "iniciante",
     trainingFrequency: "3",
@@ -50,8 +51,13 @@ export default function AnamnasePage() {
     e.preventDefault();
     setError("");
 
-    if (!formData.height || !formData.weight || !formData.age) {
+    if (!formData.height || !formData.weight || !formData.age || !formData.sexo) {
       setError("Preencha todos os campos obrigatórios.");
+      return;
+    }
+
+    if (selectedGoals.length === 0) {
+      setError("Selecione pelo menos um objetivo.");
       return;
     }
 
@@ -61,7 +67,9 @@ export default function AnamnasePage() {
         height: Number(formData.height),
         weight: Number(formData.weight),
         age: Number(formData.age),
+        sexo: formData.sexo,
         goal: formData.goal as "hipertrofia" | "emagrecimento" | "forca" | "resistencia",
+        goals: selectedGoals,
         experienceLevel: formData.experienceLevel as "iniciante" | "intermediario" | "avancado",
         trainingFrequency: Number(formData.trainingFrequency),
       });
@@ -109,9 +117,7 @@ export default function AnamnasePage() {
                   type="number"
                   placeholder="175"
                   value={formData.height}
-                  onChange={(e) =>
-                    setFormData({ ...formData, height: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, height: e.target.value })}
                   className="bg-input border-border text-foreground"
                 />
               </Field>
@@ -123,9 +129,7 @@ export default function AnamnasePage() {
                   type="number"
                   placeholder="70"
                   value={formData.weight}
-                  onChange={(e) =>
-                    setFormData({ ...formData, weight: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
                   className="bg-input border-border text-foreground"
                 />
               </Field>
@@ -137,13 +141,28 @@ export default function AnamnasePage() {
                   type="number"
                   placeholder="25"
                   value={formData.age}
-                  onChange={(e) =>
-                    setFormData({ ...formData, age: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, age: e.target.value })}
                   className="bg-input border-border text-foreground"
                 />
               </Field>
             </div>
+
+            <Field>
+              <FieldLabel>Sexo</FieldLabel>
+              <Select
+                value={formData.sexo}
+                onValueChange={(value) => setFormData({ ...formData, sexo: value })}
+              >
+                <SelectTrigger className="bg-input border-border text-foreground">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="masculino">Masculino</SelectItem>
+                  <SelectItem value="feminino">Feminino</SelectItem>
+                  <SelectItem value="outro">Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
 
             <div>
               <FieldLabel className="mb-3 block">Objetivo Principal</FieldLabel>
@@ -174,9 +193,7 @@ export default function AnamnasePage() {
                 <FieldLabel>Nível de Experiência</FieldLabel>
                 <Select
                   value={formData.experienceLevel}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, experienceLevel: value })
-                  }
+                  onValueChange={(value) => setFormData({ ...formData, experienceLevel: value })}
                 >
                   <SelectTrigger className="bg-input border-border text-foreground">
                     <SelectValue placeholder="Selecione" />
@@ -193,9 +210,7 @@ export default function AnamnasePage() {
                 <FieldLabel>Frequência de Treino (dias/semana)</FieldLabel>
                 <Select
                   value={formData.trainingFrequency}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, trainingFrequency: value })
-                  }
+                  onValueChange={(value) => setFormData({ ...formData, trainingFrequency: value })}
                 >
                   <SelectTrigger className="bg-input border-border text-foreground">
                     <SelectValue placeholder="Selecione" />
@@ -211,10 +226,7 @@ export default function AnamnasePage() {
               </Field>
             </FieldGroup>
 
-            <Button
-              type="submit"
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
               Próximo
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>

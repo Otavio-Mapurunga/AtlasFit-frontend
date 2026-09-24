@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useApp } from "@/context/app-context";
+import { criarAnamnese, gerarTreino } from "@/lib/api";
 import { AlertTriangle, Sparkles } from "lucide-react";
 
 const commonLimitations = [
@@ -29,12 +30,13 @@ const equipmentOptions = [
 
 export default function LimitacoesPage() {
   const router = useRouter();
-  const { user, setUser, setOnboardingStep } = useApp();
+  const { user, setUser, setOnboardingStep, setWorkouts } = useApp();
   const [selectedLimitations, setSelectedLimitations] = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>(["academia"]);
   const [customLimitations, setCustomLimitations] = useState("");
   const [preferences, setPreferences] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState("");
 
   const handleLimitationToggle = (id: string) => {
     setSelectedLimitations((prev) =>
@@ -50,27 +52,50 @@ export default function LimitacoesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+
+    if (!user || !user.sexo || !user.height || !user.weight || !user.age) {
+      setError("Dados incompletos. Volte à etapa anterior.");
+      return;
+    }
+
     setIsGenerating(true);
 
-    // Simulando geração do treino pela IA
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const limitacoesLabels = [
+      ...selectedLimitations.map((id) => commonLimitations.find((l) => l.id === id)?.label || ""),
+    ];
 
-    if (user) {
+    try {
+      await criarAnamnese({
+        altura: user.height,
+        peso: user.weight,
+        sexo: user.sexo,
+        objetivo: user.goals && user.goals.length > 0 ? user.goals : [user.goal],
+        experiencia: user.experienceLevel,
+        lesoes: limitacoesLabels.length > 0 ? limitacoesLabels : null,
+        dias_treino: user.trainingFrequency ?? null,
+        idade: user.age,
+        observacoes_medicas: customLimitations || "",
+        equipamentos: selectedEquipment.length > 0 ? selectedEquipment : null,
+        preferencias: preferences || "",
+      });
+
+      await gerarTreino();
+
       setUser({
         ...user,
-        limitations: [
-          ...selectedLimitations.map(
-            (id) => commonLimitations.find((l) => l.id === id)?.label || ""
-          ),
-          ...(customLimitations ? [customLimitations] : []),
-        ],
+        limitations: limitacoesLabels,
         equipment: selectedEquipment,
         preferences: preferences,
       });
-    }
 
-    setOnboardingStep("complete");
-    router.push("/dashboard");
+      setOnboardingStep("complete");
+      router.push("/dashboard");
+    } catch (err: any) {
+      console.error("Erro ao finalizar onboarding:", err);
+      setError(err.message || "Erro ao gerar treino. Tente novamente.");
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -97,6 +122,12 @@ export default function LimitacoesPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                {error}
+              </div>
+            )}
+
             <div>
               <FieldLabel className="mb-3 block">Limitações Físicas (opcional)</FieldLabel>
               <div className="grid grid-cols-2 gap-2">
@@ -171,11 +202,7 @@ export default function LimitacoesPage() {
               </Field>
             </FieldGroup>
 
-            <Button
-              type="submit"
-              disabled={isGenerating}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
+            <Button type="submit" disabled={isGenerating} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
               {isGenerating ? (
                 <>
                   <Sparkles className="w-4 h-4 mr-2 animate-pulse" />

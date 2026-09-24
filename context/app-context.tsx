@@ -1,6 +1,7 @@
 "use client";
-import { getTreinos, registrarExecucao, getHistoricoExecucao, loginApi } from "@/lib/api";
+import { getTreinos, registrarExecucao, getHistoricoExecucao, loginApi, registerApi, getAnamnese } from "@/lib/api";
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+
 import type {
   User,
   Workout,
@@ -17,6 +18,7 @@ interface AppContextType {
   onboardingStep: OnboardingStep;
   setOnboardingStep: (step: OnboardingStep) => void;
   login: (email: string, password: string) => Promise<boolean>;
+  register: (nome: string, email: string, senha: string) => Promise<boolean>;
   logout: () => void;
   workouts: Workout[];
   setWorkouts: (workouts: Workout[]) => void;
@@ -28,6 +30,7 @@ interface AppContextType {
   completedWorkouts: CompletedWorkout[];
   updateExerciseWeight: (workoutId: string, exerciseId: string, weight: number) => void;
   isLoadingData: boolean;
+  authError: string;
 }
 
 // Mantidos como fallback caso a API falhe (apresentação segura)
@@ -55,18 +58,6 @@ const mockCompletedWorkouts: CompletedWorkout[] = [
   { date: "2026-03-10", workoutId: "1", workoutName: "Peito + Tríceps" },
 ];
 
-// Usuário demo usado apenas como fallback visual (não autentica no back)
-const mockUser: User = {
-  id: "522a1f07-9408-4f3f-b90c-783862846f3e",
-  name: "Luis",
-  email: "luis@email.com",
-  height: 175,
-  weight: 70,
-  age: 22,
-  goal: "hipertrofia",
-  experienceLevel: "intermediario",
-};
-
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 function mapTreinos(data: any[]): Workout[] {
@@ -87,6 +78,23 @@ function mapTreinos(data: any[]): Workout[] {
       ) ?? [],
   }));
 }
+function mapAnamneseParaUser(base: User, anamnese: any): User {
+  const objetivos = Array.isArray(anamnese.objetivo) ? anamnese.objetivo : [anamnese.objetivo];
+  return {
+    ...base,
+    height: anamnese.altura ?? base.height,
+    weight: anamnese.peso ?? base.weight,
+    age: anamnese.idade ?? base.age,
+    sexo: anamnese.sexo ?? base.sexo,
+    goal: (objetivos[0] as User["goal"]) ?? base.goal,
+    goals: objetivos,
+    experienceLevel: anamnese.experiencia ?? base.experienceLevel,
+    trainingFrequency: anamnese.dias_treino ?? base.trainingFrequency,
+    limitations: anamnese.lesoes ?? base.limitations,
+    equipment: anamnese.equipamentos ?? base.equipment,
+    preferences: anamnese.preferencias ?? base.preferences,
+  };
+}
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -96,18 +104,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [weightHistory] = useState<WeightEntry[]>(mockWeightHistory);
   const [completedWorkouts, setCompletedWorkouts] = useState<CompletedWorkout[]>([]);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+  const [authError, setAuthError] = useState<string>("");
 
   // Hidrata usuário e token do localStorage ao recarregar a página
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch {
-        localStorage.removeItem("user");
-      }
+  const savedUser = localStorage.getItem("user");
+  const savedToken = localStorage.getItem("token");
+  if (savedUser && savedToken) {
+    try {
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      getAnamnese()
+        .then((anamnese) => {
+          const updated = mapAnamneseParaUser(parsedUser, anamnese);
+          setUser(updated);
+          localStorage.setItem("user", JSON.stringify(updated));
+        })
+        .catch(() => {});
+    } catch {
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
     }
-  }, []);
+  }
+}, []);
 
   // Carrega treinos e histórico assim que o usuário estiver disponível
   useEffect(() => {
@@ -124,7 +143,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           getHistoricoExecucao().catch(() => null),
         ]);
 
-        // getTreinos() retorna { treinos: [...] }
         const lista = Array.isArray(treinosRaw)
           ? treinosRaw
           : treinosRaw?.treinos ?? [];
@@ -141,11 +159,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }))
           );
         } else {
-          setCompletedWorkouts(mockCompletedWorkouts);
+          setCompletedWorkouts([]);
         }
       } catch (error) {
         console.error("Erro ao carregar dados da API:", error);
-        setCompletedWorkouts(mockCompletedWorkouts);
+        setWorkouts([]);
+        setCompletedWorkouts([]);
       } finally {
         setIsLoadingData(false);
       }
@@ -157,23 +176,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = user !== null;
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    if (!email || !password) return false;
+  setAuthError("");
+  if (!email || !password) return false;
+
+  try {
+    const { access_token, aluno } = await loginApi(email, password);
+    localStorage.setItem("token", access_token);
+
+    let loggedUser: User = {
+      id: aluno.id_aluno,
+      name: aluno.nome,
+      email: aluno.email,
+      height: 0,
+      weight: 0,
+      age: 0,
+      goal: "hipertrofia",
+      experienceLevel: "iniciante",
+    };
 
     try {
-      // Para a apresentação: usa o ID do usuário demo conhecido no banco.
-      // Quando o back tiver cadastro real, trocar pelo ID retornado pelo endpoint de registro.
-      const userId = mockUser.id;
-      const { access_token } = await loginApi(userId);
+      const anamnese = await getAnamnese();
+      loggedUser = mapAnamneseParaUser(loggedUser, anamnese);
+    } catch {
+      // Sem anamnese ainda (usuário novo) — segue com os valores padrão
+    }
+
+    localStorage.setItem("user", JSON.stringify(loggedUser));
+    setUser(loggedUser);
+    return true;
+  } catch (err: any) {
+    console.error("Falha no login:", err);
+    setAuthError(err.message || "Erro ao autenticar.");
+    return false;
+  }
+};
+
+  const register = async (nome: string, email: string, senha: string): Promise<boolean> => {
+    setAuthError("");
+    try {
+      const { access_token, aluno } = await registerApi(nome, email, senha);
 
       localStorage.setItem("token", access_token);
 
-      const loggedUser: User = { ...mockUser, id: userId };
-      localStorage.setItem("user", JSON.stringify(loggedUser));
-      setUser(loggedUser);
+      const newUser: User = {
+        id: aluno.id_aluno,
+        name: aluno.nome,
+        email: aluno.email,
+        height: 0,
+        weight: 0,
+        age: 0,
+        goal: "hipertrofia",
+        experienceLevel: "iniciante",
+      };
+      localStorage.setItem("user", JSON.stringify(newUser));
+      setUser(newUser);
 
       return true;
-    } catch (err) {
-      console.error("Falha no login:", err);
+    } catch (err: any) {
+      console.error("Falha no registro:", err);
+      setAuthError(err.message || "Erro ao criar conta.");
       return false;
     }
   };
@@ -213,7 +274,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const workout = workouts.find((w) => w.id === workoutId);
     if (!workout) return;
 
-    // Atualização otimista
     setCompletedWorkouts((prev) => [
       ...prev,
       {
@@ -237,7 +297,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         exercicios: workout.exercises.map((ex) => ({
           id: ex.id,
           series_realizadas: ex.sets,
-          // reps pode ser "8-10" — manda null se não for número puro
           reps_realizadas: typeof ex.reps === "number" ? ex.reps : null,
           peso_utilizado: ex.weight || 0,
         })),
@@ -271,6 +330,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onboardingStep,
         setOnboardingStep,
         login,
+        register,
         logout,
         workouts,
         setWorkouts,
@@ -282,6 +342,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         completedWorkouts,
         updateExerciseWeight,
         isLoadingData,
+        authError,
       }}
     >
       {children}
